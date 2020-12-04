@@ -1,0 +1,207 @@
+<html>
+  <head>
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <!-- <script src="https://unpkg.com/aframe-environment-component/dist/aframe-environment-component.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/gh/n5ro/aframe-physics-system@v4.0.1/dist/aframe-physics-system.min.js"></script>
+    <script>
+      AFRAME.registerComponent('modify-materials-to-red', {
+        init: function () {
+          // Wait for model to load.
+          this.el.addEventListener('model-loaded', () => {
+            this.el.setAttribute('material', 'color', 'red');
+          });
+        }
+      });
+      AFRAME.registerComponent('modify-materials-to-black', {
+        init: function () {
+          // Wait for model to load.
+          this.el.addEventListener('model-loaded', () => {
+            this.el.setAttribute('material', 'color', '#222');
+          });
+        }
+      });
+    </script>
+  </head>
+  <body style="touch-action: manipulation;"> <!-- disable double tap zoom on ios -->
+    <button style="position: absolute; left: 0; bottom: 0; z-index: 20; width: 100; height: 100; border-radius: 50%; color: white;">Fire</button>
+    <a-scene id="scene" physics-world="gravity: 0 0 0" fog="type: exponential; density: 0.2; color: #bbb;" style="cursor: pointer;">
+        <a-assets>
+          <img id="ground" src="./zombieModels/Forest-Ground_01.jpg">
+          <!-- <audio id="gunShot" src="./zombieModels/" preload="auto"></audio> -->
+          <!-- <audio id="backgroundSound" src="./zombieModels/horror-violin.wav" preload="auto"></audio> -->
+        </a-assets>
+        <a-entity id="camera" camera look-controls position="0 0 0">
+          <a-entity cursor="fuse: true; fuseTimeout: 500"
+                    position="0 0 -0.1"
+                    geometry="primitive: ring; radiusInner: 0.001; radiusOuter: 0.002"
+                    material="color: red; shader: flat">
+          </a-entity>
+          <a-entity modify-materials-to-black obj-model="obj: url(/zombieModels/Pistol_obj/Pistol_obj.obj);" rotation="-90 90 0" position="0 -0.5 -0.7" scale="0.03 0.03 0.03" light="type: point; intensity: 0.3"></a-entity>
+          <!-- <a-text id="text" value="Tuez les ennemis avant qu'ils atteignent la maison" position="-1 2.2 -3"></a-text> -->
+        </a-entity>
+        <a-entity class="house" static-body="shape: box; mass: 10; " obj-model="obj: url(/zombieModels/house/Farm_house.obj); mtl: url(/zombieModels/house/Farm_house.mtl);" position="0 4 -10" rotation="0 90 0" scale="0.1 0.1 0.1"></a-entity>
+        <a-plane src="#ground" position="0 -1 0" width="100" height="100" repeat="70 70" rotation="-90 0 0"></a-plane>
+        <a-sky color="#0E0A14"></a-sky>
+        <a-light type="ambient" color="#333"></a-light>
+        <!-- <a-entity sound="src: #backgroundSound" loop></a-entity> -->
+    </a-scene>
+  </body>
+  <script>
+    const scene = document.getElementById("scene")
+    let shouldContinuePlaying = true
+    let camera = document.getElementById("camera")
+
+    setTimeout(() => {
+      let text = document.getElementById("text")
+      camera.removeChild(text)
+    }, 3000)
+
+    document.body.addEventListener("click", () => {
+      let cameraPos = camera.getAttribute("position")
+      let direction = new THREE.Vector3() // camera direction
+      scene.camera.getWorldDirection(direction)
+      direction.multiplyScalar(50)
+
+      let bullet = document.createElement("a-sphere")
+      bullet.setAttribute("color", "blue")
+      bullet.setAttribute("radius", "0.05")
+      bullet.setAttribute('position', `${cameraPos.x} -0.5 ${cameraPos.z}`)
+      bullet.setAttribute('dynamic-body', "shape: sphere; sphereRadius: 0.05; mass: 0;")
+      bullet.setAttribute('sphere-collider', "objects: .monster")
+      bullet.setAttribute('class', "bullet")
+      // bullet.setAttribute('physics-collider', "ignoreSleep: false")
+      scene.appendChild(bullet)
+
+      bullet.setAttribute("animation", `property: position; to: ${direction.x} ${direction.y} ${direction.z}; dur: 500;`)
+
+      bullet.addEventListener('collide', (e) => {
+        if (e.detail.body.el.getAttribute('class') === "monster") {
+          scene.removeChild(bullet)
+        }
+      })
+    })
+
+    function createMonster(x, y, z, id) {
+      let monster = document.createElement("a-entity")
+      monster.setAttribute('obj-model', "obj: url(/zombieModels/3d-model.obj); mtl: url(/zombieModels/3d-model.mtl);")
+      monster.setAttribute('scale', "0.01 0.01 0.01")
+      monster.setAttribute('rotation', "0 -90 0")
+      // monster.setAttribute('cursor-listener', true)
+      monster.setAttribute('modify-materials-to-red', true)
+      monster.setAttribute('position', `${x} ${y} ${z}`)
+      monster.setAttribute('id', `${id}`)
+      monster.setAttribute('class', 'monster')
+      // monster.setAttribute('static-body', "shape: sphere; sphereRadius: 0.5;")
+      monster.setAttribute('dynamic-body', "shape: sphere; sphereRadius: 0.5; mass: 0; velocity: 0 0 -2")
+      monster.setAttribute('sphere-collider', "objects: .bullet")
+      // monster.setAttribute('physics-collider', "ignoreSleep: false")
+      scene.appendChild(monster)
+      monster.setAttribute('animation', "property: position; to: 0 -0.5 -10; dur: 20000;")
+
+      monster.addEventListener('collide', (e) => {
+        if (e.detail.body.el.getAttribute('class') === "bullet") {
+          scene.removeChild(monster)
+        }
+        else if (e.detail.body.el.getAttribute('class') === "house") {
+          // you lost
+          scene.removeChild(monster)
+          console.log("you lost")
+          let lostText = document.createElement("a-text")
+          lostText.setAttribute("id", "text")
+          lostText.setAttribute("value", "Un monstre est entre...")
+          lostText.setAttribute("position", "-1 2.2 -3")
+          camera.appendChild(lostText)
+          shouldContinuePlaying = false
+
+          setTimeout(() => {
+            camera.removeChild(lostText)
+          }, 3000)
+        }
+      })
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    let index = 0
+    let sides = ["front", "left", "back", "right"]
+    let cameraPositions = ["0 0 0", "10 0 -12", "0, 0, -20", "-10 0 -12"]
+    async function gameLoop() {
+      while (shouldContinuePlaying) {
+        for (let i = 0; i < 10; i++) {
+          // create monsters on a side
+          if (sides[index] === "front") {
+            let x = (Math.random() * 10) - 5 // numbers between -5 and 5
+            createMonster(x, -0.5, 30, i)
+          }
+          else if (sides[index] === "left") {
+            let z = (Math.random() * 10) - 5 // numbers between -5 and 5
+            createMonster(40, -0.5, z - 12, i)
+          }
+          else if (sides[index] === "back") {
+            let x = (Math.random() * 10) - 5 // numbers between -5 and 5
+            createMonster(x, -0.5, -50, i)
+          }
+          else if (sides[index] === "right") {
+            let z = (Math.random() * 10) - 5 // numbers between -5 and 5
+            createMonster(-40, -0.5, z - 12, i)
+          }
+          await sleep(2000)
+        }
+        // wait for 2 seconds, move to the next side
+        if (index !== 3) {
+            index += 1
+          }
+          else {
+            index = 0
+          }
+        await sleep(10000)
+        camera.setAttribute("position", cameraPositions[index])
+      }
+
+      let lostText = document.createElement("a-text")
+      lostText.setAttribute("id", "lostText")
+      lostText.setAttribute("value", "Vous avez perdu...")
+      lostText.setAttribute("position", "-1 2.2 -3")
+      camera.appendChild(lostText)
+
+      setTimeout(() => {
+        camera.removeChild(lostText)
+      }, 3000)
+    }
+
+    gameLoop()
+
+    // camera.setAttribute("position", "10 0 -12") // left
+    // camera.setAttribute("position", "-10 0 -12") // right
+    // camera.setAttribute("position", "0, 0, -20") // back
+
+    // droit = x = 20 et z appartient à [-30; 30]
+    // gauche = x = -20 et z appartient à [-30; 30]
+    // haut = x variable z = 20
+
+    // const scene = document.getElementById("scene")
+
+    // function getRandomInt(max) {
+    //   return Math.random() * max;
+    // }
+
+    // function createTree(x, y, z) {
+    //   let tree = document.createElement("a-entity")
+    //   tree.setAttribute('obj-model', "obj: url(/zombieModels/Trees_pack_obj/Trees_pack.obj); mtl: url(/zombieModels/Trees_pack_obj/Trees_pack.mtl);")
+    //   tree.setAttribute('scale', "1 1 1")
+    //   tree.setAttribute('rotation', "0 " + getRandomInt(90) + " 0")
+    //   tree.setAttribute('position', `${x} ${y} ${z}`)
+    //   scene.appendChild(tree)
+    // }
+
+    // // right and left of the house
+    // for (let i = -30; i <= 30; i += 3) {
+    //   createTree(20, 0, i)
+    //   createTree(-20, 0, i)
+    //   createTree(i, 0, 20)
+    //   createTree(i, 0, -20)
+    // }
+  </script>
+</html>
